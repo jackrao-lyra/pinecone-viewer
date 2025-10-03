@@ -1,0 +1,70 @@
+import { z } from "zod";
+import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
+import { pineconeIndex } from "~/config/pinecone";
+
+export async function fetchByIds(subdomain: string, ids: string[]) {
+  return pineconeIndex.namespace(subdomain).fetch(ids);
+}
+export async function listPaginated(
+  subdomain: string,
+  options: { paginationToken?: string; limit?: number },
+) {
+  return pineconeIndex.namespace(subdomain).listPaginated(options);
+}
+
+export async function getAllVectors(subdomain: string) {
+  const allVectors: string[] = [];
+
+  let currentPage = await listPaginated(subdomain, {});
+
+  while (currentPage) {
+    if (currentPage.vectors) {
+      for (const vectorItem of currentPage.vectors) {
+        if (vectorItem.id) {
+          allVectors.push(vectorItem.id);
+        }
+      }
+    }
+
+    if (!currentPage.pagination?.next) {
+      break;
+    }
+
+    currentPage = await listPaginated(subdomain, {
+      paginationToken: currentPage.pagination.next,
+    });
+  }
+
+  return allVectors;
+}
+
+export const pineconeRouter = createTRPCRouter({
+  listNamespaces: publicProcedure
+    .query(async () => {
+      try {
+        const stats = await pineconeIndex.describeIndexStats();
+        const namespaces = Object.keys(stats.namespaces ?? {});
+        return {
+          namespaces,
+          totalNamespaces: namespaces.length,
+        };
+      } catch (error) {
+        console.error("Error fetching namespaces:", error);
+        throw new Error("Failed to fetch namespaces");
+      }
+    }),
+
+  listVectorsInNamespace: publicProcedure
+    .input(
+      z.object({
+        namespace: z.string(),
+      }),
+    )
+    .query(async ({ input }) => {
+      const vectors = await getAllVectors(input.namespace);
+
+      return {
+        vectors,
+      };
+    }),
+});

@@ -1,53 +1,76 @@
-import Link from "next/link";
+"use client";
 
-import { LatestPost } from "~/app/_components/post";
-import { api, HydrateClient } from "~/trpc/server";
+import { useState } from "react";
+import { NamespaceList } from "~/app/_components/namespace-list";
+import { VectorList } from "~/app/_components/vector-list";
+import { api } from "~/trpc/react";
 
-export default async function Home() {
-  const hello = await api.post.hello({ text: "from tRPC" });
+export default function Home() {
+  const [selectedNamespace, setSelectedNamespace] = useState<string>("");
 
-  void api.post.getLatest.prefetch();
+  const {
+    data: namespacesData,
+    isLoading: namespacesLoading,
+  } = api.pinecone.listNamespaces.useQuery();
+
+  const {
+    data: vectorIds,
+    isLoading: vectorsLoading,
+  } = api.pinecone.listVectorsInNamespace.useQuery(
+    { namespace: selectedNamespace },
+    { enabled: !!selectedNamespace }
+  );
+
+  const handleNamespaceSelect = (namespace: string) => {
+    setSelectedNamespace(namespace);
+  };
 
   return (
-    <HydrateClient>
-      <main className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-[#2e026d] to-[#15162c] text-white">
-        <div className="container flex flex-col items-center justify-center gap-12 px-4 py-16">
-          <h1 className="text-5xl font-extrabold tracking-tight sm:text-[5rem]">
-            Create <span className="text-[hsl(280,100%,70%)]">T3</span> App
+    <main className="min-h-screen bg-gray-50">
+      <div className="container mx-auto px-4 py-8">
+        <div className="mb-8 text-center">
+          <h1 className="mb-4 text-4xl font-bold text-gray-900">
+            Pinecone Viewer
           </h1>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:gap-8">
-            <Link
-              className="flex max-w-xs flex-col gap-4 rounded-xl bg-white/10 p-4 hover:bg-white/20"
-              href="https://create.t3.gg/en/usage/first-steps"
-              target="_blank"
-            >
-              <h3 className="text-2xl font-bold">First Steps →</h3>
-              <div className="text-lg">
-                Just the basics - Everything you need to know to set up your
-                database and authentication.
-              </div>
-            </Link>
-            <Link
-              className="flex max-w-xs flex-col gap-4 rounded-xl bg-white/10 p-4 hover:bg-white/20"
-              href="https://create.t3.gg/en/introduction"
-              target="_blank"
-            >
-              <h3 className="text-2xl font-bold">Documentation →</h3>
-              <div className="text-lg">
-                Learn more about Create T3 App, the libraries it uses, and how
-                to deploy it.
-              </div>
-            </Link>
-          </div>
-          <div className="flex flex-col items-center gap-2">
-            <p className="text-2xl text-white">
-              {hello ? hello.greeting : "Loading tRPC query..."}
-            </p>
-          </div>
-
-          <LatestPost />
+          <p className="text-lg text-gray-600">
+            Explore and visualize your Pinecone vector database
+          </p>
         </div>
-      </main>
-    </HydrateClient>
+
+        <div className="mx-auto max-w-7xl">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+            {/* Left column - Namespaces */}
+            <div className="lg:col-span-1">
+              <NamespaceList
+                namespaces={namespacesData?.namespaces || []}
+                selectedNamespace={selectedNamespace}
+                onNamespaceSelect={handleNamespaceSelect}
+                isLoading={namespacesLoading}
+              />
+            </div>
+
+            {/* Right column - Vectors */}
+            <div className="lg:col-span-2">
+              {selectedNamespace ? (
+                <VectorList
+                  vectorIds={vectorIds?.vectors || []}
+                  namespace={selectedNamespace}
+                  isLoading={vectorsLoading}
+                />
+              ) : (
+                <div className="rounded-lg bg-white p-6 shadow-md">
+                  <h3 className="mb-4 text-xl font-semibold text-gray-800">
+                    Select a Namespace
+                  </h3>
+                  <p className="text-gray-600">
+                    Choose a namespace from the left panel to view its vectors.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
   );
 }
