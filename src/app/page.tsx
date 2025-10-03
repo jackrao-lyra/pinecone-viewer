@@ -3,26 +3,29 @@
 import { useState } from "react";
 import { NamespaceList } from "~/app/_components/namespace-list";
 import { VectorList } from "~/app/_components/vector-list";
+import { VectorDetail } from "~/app/_components/vector-detail";
 import { api } from "~/trpc/react";
 
 export default function Home() {
   const [selectedNamespace, setSelectedNamespace] = useState<string>("");
+  const [selectedVectorId, setSelectedVectorId] = useState<string>("");
 
-  const {
-    data: namespacesData,
-    isLoading: namespacesLoading,
-  } = api.pinecone.listNamespaces.useQuery();
+  const { data: namespacesData, isLoading: namespacesLoading } =
+    api.pinecone.listNamespaces.useQuery();
 
-  const {
-    data: vectorIds,
-    isLoading: vectorsLoading,
-  } = api.pinecone.listVectorsInNamespace.useQuery(
-    { namespace: selectedNamespace },
-    { enabled: !!selectedNamespace }
-  );
+  const { data: vectorIds, isLoading: vectorsLoading } =
+    api.pinecone.listVectorsInNamespace.useQuery(
+      { namespace: selectedNamespace },
+      { enabled: !!selectedNamespace },
+    );
 
   const handleNamespaceSelect = (namespace: string) => {
     setSelectedNamespace(namespace);
+    setSelectedVectorId(""); // Clear selected vector when namespace changes
+  };
+
+  const handleVectorSelect = (vectorId: string) => {
+    setSelectedVectorId(vectorId);
   };
 
   return (
@@ -37,25 +40,27 @@ export default function Home() {
           </p>
         </div>
 
-        <div className="mx-auto max-w-7xl">
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <div className="mx-auto max-w-none px-4">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
             {/* Left column - Namespaces */}
-            <div className="lg:col-span-1">
+            <div className="lg:col-span-4">
               <NamespaceList
-                namespaces={namespacesData?.namespaces || []}
+                namespaces={namespacesData?.namespaces ?? []}
                 selectedNamespace={selectedNamespace}
                 onNamespaceSelect={handleNamespaceSelect}
                 isLoading={namespacesLoading}
               />
             </div>
 
-            {/* Right column - Vectors */}
-            <div className="lg:col-span-2">
+            {/* Middle column - Vectors */}
+            <div className="lg:col-span-4">
               {selectedNamespace ? (
                 <VectorList
-                  vectorIds={vectorIds?.vectors || []}
+                  vectorIds={vectorIds?.vectors ?? []}
                   namespace={selectedNamespace}
                   isLoading={vectorsLoading}
+                  selectedVectorId={selectedVectorId}
+                  onVectorSelect={handleVectorSelect}
                 />
               ) : (
                 <div className="rounded-lg bg-white p-6 shadow-md">
@@ -67,6 +72,14 @@ export default function Home() {
                   </p>
                 </div>
               )}
+            </div>
+
+            {/* Right column - Vector Details */}
+            <div className="lg:col-span-4">
+              <VectorDetail
+                vectorId={selectedVectorId}
+                namespace={selectedNamespace}
+              />
             </div>
           </div>
         </div>

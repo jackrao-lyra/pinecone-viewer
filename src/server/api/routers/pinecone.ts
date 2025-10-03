@@ -39,20 +39,19 @@ export async function getAllVectors(subdomain: string) {
 }
 
 export const pineconeRouter = createTRPCRouter({
-  listNamespaces: publicProcedure
-    .query(async () => {
-      try {
-        const stats = await pineconeIndex.describeIndexStats();
-        const namespaces = Object.keys(stats.namespaces ?? {});
-        return {
-          namespaces,
-          totalNamespaces: namespaces.length,
-        };
-      } catch (error) {
-        console.error("Error fetching namespaces:", error);
-        throw new Error("Failed to fetch namespaces");
-      }
-    }),
+  listNamespaces: publicProcedure.query(async () => {
+    try {
+      const stats = await pineconeIndex.describeIndexStats();
+      const namespaces = Object.keys(stats.namespaces ?? {});
+      return {
+        namespaces,
+        totalNamespaces: namespaces.length,
+      };
+    } catch (error) {
+      console.error("Error fetching namespaces:", error);
+      throw new Error("Failed to fetch namespaces");
+    }
+  }),
 
   listVectorsInNamespace: publicProcedure
     .input(
@@ -66,5 +65,38 @@ export const pineconeRouter = createTRPCRouter({
       return {
         vectors,
       };
+    }),
+
+  fetchVector: publicProcedure
+    .input(
+      z.object({
+        namespace: z.string(),
+        vectorId: z.string(),
+      }),
+    )
+    .query(async ({ input }) => {
+      try {
+        const result = await fetchByIds(input.namespace, [input.vectorId]);
+        const record = result.records[input.vectorId];
+        if (!record) {
+          throw new Error("Vector not found");
+        }
+
+        const formattedRecord = {
+          id: record.id,
+          metadata: record.metadata,
+          values: record.values,
+          sparseValues: record.sparseValues,
+        };
+
+        // const fs = require("fs");
+        // fs.writeFileSync("formattedRecord.json", JSON.stringify(formattedRecord, null, 2));
+        return {
+          stringified: JSON.stringify(formattedRecord, null, 2),
+        };
+      } catch (error) {
+        console.error("Error fetching vector:", error);
+        throw new Error("Failed to fetch vector");
+      }
     }),
 });

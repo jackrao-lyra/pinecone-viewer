@@ -4,12 +4,16 @@ interface VectorListProps {
   vectorIds: string[];
   namespace: string;
   isLoading?: boolean;
+  selectedVectorId?: string;
+  onVectorSelect?: (vectorId: string) => void;
 }
 
 export function VectorList({
   vectorIds,
   namespace,
   isLoading,
+  selectedVectorId,
+  onVectorSelect,
 }: VectorListProps) {
   if (isLoading) {
     return (
@@ -50,15 +54,20 @@ export function VectorList({
 
       <div className="max-h-96 space-y-2 overflow-y-auto">
         {vectorIds.map((vectorId, index) => (
-          <div
+          <button
             key={vectorId}
-            className="rounded-lg border border-gray-200 p-3 hover:bg-gray-50"
+            onClick={() => onVectorSelect?.(vectorId)}
+            className={`w-full rounded-lg border p-3 text-left transition-colors ${
+              selectedVectorId === vectorId
+                ? "border-blue-500 bg-blue-50 text-blue-900"
+                : "border-gray-200 hover:bg-gray-50"
+            }`}
           >
             <div className="flex items-center">
               <span className="mr-3 text-sm text-gray-500">#{index + 1}</span>
-              <code className="font-mono text-sm text-gray-900">{vectorId}</code>
+              <code className="font-mono text-sm">{vectorId}</code>
             </div>
-          </div>
+          </button>
         ))}
       </div>
     </div>
