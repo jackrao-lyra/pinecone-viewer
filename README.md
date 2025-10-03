@@ -1,29 +1,58 @@
-# Create T3 App
+# Pinecone Viewer
 
-This is a [T3 Stack](https://create.t3.gg/) project bootstrapped with `create-t3-app`.
+View your Pinecone vector database namespaces and vectors with only an API key
 
-## What's next? How do I make an app with this?
+## Prerequisites
 
-We try to keep this project as simple as possible, so you can start with just the scaffolding we set up for you, and add additional things later when they become necessary.
+- Node.js 20+ and npm
+- Postgresql
+- A Pinecone API key with access to the target index
 
-If you are not familiar with the different technologies used in this project, please refer to the respective docs. If you still are in the wind, please join our [Discord](https://t3.gg/discord) and ask for help.
+## Quick Start
 
-- [Next.js](https://nextjs.org)
-- [NextAuth.js](https://next-auth.js.org)
-- [Prisma](https://prisma.io)
-- [Drizzle](https://orm.drizzle.team)
-- [Tailwind CSS](https://tailwindcss.com)
-- [tRPC](https://trpc.io)
+1. Install dependencies
 
-## Learn More
+```bash
+npm install
+```
 
-To learn more about the [T3 Stack](https://create.t3.gg/), take a look at the following resources:
+2. Environment variables
 
-- [Documentation](https://create.t3.gg/)
-- [Learn the T3 Stack](https://create.t3.gg/en/faq#what-learning-resources-are-currently-available) — Check out these awesome tutorials
+Minimum required variables:
 
-You can check out the [create-t3-app GitHub repository](https://github.com/t3-oss/create-t3-app) — your feedback and contributions are welcome!
+```bash
+NODE_ENV=development
+DATABASE_URL=<your-postgresql-url>
+PINECONE_KEY=<your-pinecone-api-key>
+PINECONE_INDEX=<your-index-name>
+```
 
-## How do I deploy this?
+4. Initialize the database (Prisma)
 
-Follow our deployment guides for [Vercel](https://create.t3.gg/en/deployment/vercel), [Netlify](https://create.t3.gg/en/deployment/netlify) and [Docker](https://create.t3.gg/en/deployment/docker) for more information.
+```bash
+npm run db:push     
+```
+
+5. Run the app (dev on port 3009)
+
+```bash
+npm run dev
+```
+
+Open `http://localhost:3009`.
+
+## Environment Variables
+
+- `NODE_ENV`: typically `development` for local.
+- `DATABASE_URL`: Postgres connection string. The helper script expects the standard Postgres format, for example `postgresql://user@localhost:5432/pinecone-viewer`.
+- `PINECONE_KEY`: Your Pinecone API key.
+- `PINECONE_INDEX`: The Pinecone index to inspect.
+ 
+## Using the App
+
+1. Ensure `PINECONE_KEY` and `PINECONE_INDEX` are set and valid.
+2. Start the app (`npm run dev`).
+3. In the UI:
+   - Left panel lists Pinecone namespaces.
+   - Select a namespace to see vectors.
+   - Select a vector to inspect its values and metadata.
