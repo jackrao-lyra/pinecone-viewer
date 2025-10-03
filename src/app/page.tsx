@@ -13,14 +13,11 @@ export default function Home() {
   const { data: namespacesData, isLoading: namespacesLoading } =
     api.pinecone.listNamespaces.useQuery();
 
-  const {
-    data: vectorIds,
-    isLoading: vectorsLoading,
-    refetch: refetchVectors,
-  } = api.pinecone.listVectorsInNamespace.useQuery(
-    { namespace: selectedNamespace },
-    { enabled: !!selectedNamespace },
-  );
+  const { data: vectorIds, isLoading: vectorsLoading } =
+    api.pinecone.listVectorsInNamespace.useQuery(
+      { namespace: selectedNamespace },
+      { enabled: !!selectedNamespace },
+    );
 
   const handleNamespaceSelect = (namespace: string) => {
     setSelectedNamespace(namespace);
@@ -29,11 +26,6 @@ export default function Home() {
 
   const handleVectorSelect = (vectorId: string) => {
     setSelectedVectorId(vectorId);
-  };
-
-  const handleVectorsChange = () => {
-    void refetchVectors();
-    setSelectedVectorId(""); // Clear selected vector when vectors change
   };
 
   return (
@@ -69,7 +61,6 @@ export default function Home() {
                   isLoading={vectorsLoading}
                   selectedVectorId={selectedVectorId}
                   onVectorSelect={handleVectorSelect}
-                  onVectorsChange={handleVectorsChange}
                 />
               ) : (
                 <div className="rounded-lg bg-white p-6 shadow-md">

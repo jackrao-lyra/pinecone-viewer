@@ -9,7 +9,6 @@ interface VectorListProps {
   isLoading?: boolean;
   selectedVectorId?: string;
   onVectorSelect?: (vectorId: string) => void;
-  onVectorsChange?: () => void;
 }
 
 export function VectorList({
@@ -18,7 +17,6 @@ export function VectorList({
   isLoading,
   selectedVectorId,
   onVectorSelect,
-  onVectorsChange,
 }: VectorListProps) {
   const [showDeleteAllDialog, setShowDeleteAllDialog] = useState(false);
 
@@ -65,9 +63,45 @@ export function VectorList({
   });
 
   const deleteAllVectorsMutation = api.pinecone.deleteAllVectors.useMutation({
+    onMutate: async ({ namespace }) => {
+      // Cancel any outgoing refetches
+      await utils.pinecone.listVectorsInNamespace.cancel({ namespace });
+
+      // Snapshot the previous value
+      const previousVectors = utils.pinecone.listVectorsInNamespace.getData({
+        namespace,
+      });
+
+      // Optimistically update to empty array
+      if (previousVectors) {
+        utils.pinecone.listVectorsInNamespace.setData(
+          { namespace },
+          {
+            vectors: [],
+          },
+        );
+      }
+
+      // Return a context object with the snapshotted value
+      return { previousVectors };
+    },
     onSuccess: () => {
       setShowDeleteAllDialog(false);
-      onVectorsChange?.();
+    },
+    onError: (err, variables, context) => {
+      // If the mutation fails, use the context returned from onMutate to roll back
+      if (context?.previousVectors) {
+        utils.pinecone.listVectorsInNamespace.setData(
+          { namespace: variables.namespace },
+          context.previousVectors,
+        );
+      }
+    },
+    onSettled: (data, error, variables) => {
+      // Always refetch after error or success to ensure consistency
+      void utils.pinecone.listVectorsInNamespace.invalidate({
+        namespace: variables.namespace,
+      });
     },
   });
 

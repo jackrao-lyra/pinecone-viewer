@@ -12,6 +12,29 @@ export async function listPaginated(
   return pineconeIndex.namespace(subdomain).listPaginated(options);
 }
 
+export async function getAllNamespaces() {
+  const allNamespaces: string[] = [];
+
+  let currentPage = await pineconeIndex.listNamespaces();
+
+  while (currentPage) {
+    if (currentPage.namespaces) {
+      for (const namespace of currentPage.namespaces) {
+        if (namespace.name) {
+          allNamespaces.push(namespace.name);
+        }
+      }
+    }
+
+    if (!currentPage.pagination?.next) {
+      break;
+    }
+
+    currentPage = await pineconeIndex.listNamespaces();
+  }
+
+  return allNamespaces;
+}
 export async function getAllVectors(subdomain: string) {
   const allVectors: string[] = [];
 
@@ -41,8 +64,7 @@ export async function getAllVectors(subdomain: string) {
 export const pineconeRouter = createTRPCRouter({
   listNamespaces: publicProcedure.query(async () => {
     try {
-      const stats = await pineconeIndex.describeIndexStats();
-      const namespaces = Object.keys(stats.namespaces ?? {});
+      const namespaces = await getAllNamespaces();
       return {
         namespaces,
         totalNamespaces: namespaces.length,
