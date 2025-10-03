@@ -53,6 +53,41 @@ export const pineconeRouter = createTRPCRouter({
     }
   }),
 
+  deleteVector: publicProcedure
+    .input(
+      z.object({
+        namespace: z.string(),
+        vectorId: z.string(),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      try {
+        await pineconeIndex
+          .namespace(input.namespace)
+          .deleteOne(input.vectorId);
+        return { success: true };
+      } catch (error) {
+        console.error("Error deleting vector:", error);
+        throw new Error("Failed to delete vector");
+      }
+    }),
+
+  deleteAllVectors: publicProcedure
+    .input(
+      z.object({
+        namespace: z.string(),
+      }),
+    )
+    .mutation(async ({ input }) => {
+      try {
+        await pineconeIndex.namespace(input.namespace).deleteAll();
+        return { success: true };
+      } catch (error) {
+        console.error("Error deleting all vectors:", error);
+        throw new Error("Failed to delete all vectors");
+      }
+    }),
+
   listVectorsInNamespace: publicProcedure
     .input(
       z.object({
