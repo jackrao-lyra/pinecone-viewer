@@ -1,5 +1,6 @@
 import { postRouter } from "~/server/api/routers/post";
 import { pineconeRouter } from "~/server/api/routers/pinecone";
+import { starredNamespacesRouter } from "~/server/api/routers/starred-namespaces";
 import { createCallerFactory, createTRPCRouter } from "~/server/api/trpc";
 
 /**
@@ -10,6 +11,7 @@ import { createCallerFactory, createTRPCRouter } from "~/server/api/trpc";
 export const appRouter = createTRPCRouter({
   post: postRouter,
   pinecone: pineconeRouter,
+  starredNamespaces: starredNamespacesRouter,
 });
 
 // export type definition of API
