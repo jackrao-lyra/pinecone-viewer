@@ -15,15 +15,75 @@ export function NamespaceList({
   onNamespaceSelect,
   isLoading,
 }: NamespaceListProps) {
-  const { data: starredNamespaces, refetch: refetchStarred } =
-    api.starredNamespaces.list.useQuery();
+  const { data: starredNamespaces } = api.starredNamespaces.list.useQuery();
+  const utils = api.useUtils();
 
   const starMutation = api.starredNamespaces.star.useMutation({
-    onSuccess: () => refetchStarred(),
+    onMutate: async ({ namespace }) => {
+      // Cancel any outgoing refetches
+      await utils.starredNamespaces.list.cancel();
+
+      // Snapshot the previous value
+      const previousStarred = utils.starredNamespaces.list.getData();
+
+      // Optimistically update to add the namespace
+      if (previousStarred) {
+        utils.starredNamespaces.list.setData(undefined, {
+          starredNamespaces: [...previousStarred.starredNamespaces, namespace],
+        });
+      }
+
+      // Return a context object with the snapshotted value
+      return { previousStarred };
+    },
+    onError: (err, variables, context) => {
+      // If the mutation fails, use the context returned from onMutate to roll back
+      if (context?.previousStarred) {
+        utils.starredNamespaces.list.setData(
+          undefined,
+          context.previousStarred,
+        );
+      }
+    },
+    onSettled: () => {
+      // Always refetch after error or success to ensure consistency
+      void utils.starredNamespaces.list.invalidate();
+    },
   });
 
   const unstarMutation = api.starredNamespaces.unstar.useMutation({
-    onSuccess: () => refetchStarred(),
+    onMutate: async ({ namespace }) => {
+      // Cancel any outgoing refetches
+      await utils.starredNamespaces.list.cancel();
+
+      // Snapshot the previous value
+      const previousStarred = utils.starredNamespaces.list.getData();
+
+      // Optimistically update to remove the namespace
+      if (previousStarred) {
+        utils.starredNamespaces.list.setData(undefined, {
+          starredNamespaces: previousStarred.starredNamespaces.filter(
+            (ns) => ns !== namespace,
+          ),
+        });
+      }
+
+      // Return a context object with the snapshotted value
+      return { previousStarred };
+    },
+    onError: (err, variables, context) => {
+      // If the mutation fails, use the context returned from onMutate to roll back
+      if (context?.previousStarred) {
+        utils.starredNamespaces.list.setData(
+          undefined,
+          context.previousStarred,
+        );
+      }
+    },
+    onSettled: () => {
+      // Always refetch after error or success to ensure consistency
+      void utils.starredNamespaces.list.invalidate();
+    },
   });
 
   const handleStarToggle = (namespace: string, isStarred: boolean) => {
