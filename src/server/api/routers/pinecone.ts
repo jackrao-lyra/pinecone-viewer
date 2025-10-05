@@ -136,7 +136,9 @@ export const pineconeRouter = createTRPCRouter({
         const result = await fetchByIds(input.namespace, [input.vectorId]);
         const record = result.records[input.vectorId];
         if (!record) {
-          throw new Error("Vector not found");
+          return {
+            stringified: "not found",
+          };
         }
 
         const formattedRecord = {

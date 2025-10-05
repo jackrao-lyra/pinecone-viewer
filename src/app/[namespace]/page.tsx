@@ -1,15 +1,25 @@
 "use client";
 
-import { useState } from "react";
+import { useState, use } from "react";
 import { useRouter } from "next/navigation";
 import { NamespaceList } from "~/app/_components/namespace-list";
 import { VectorList } from "~/app/_components/vector-list";
 import { VectorDetail } from "~/app/_components/vector-detail";
 import { api } from "~/trpc/react";
 
-export default function Home() {
+interface PageParams {
+  namespace: string;
+}
+
+export default function NamespacePage({
+  params,
+}: {
+  params: Promise<PageParams>;
+}) {
+  const { namespace } = use(params);
+
   const router = useRouter();
-  const [selectedNamespace, setSelectedNamespace] = useState<string>("");
+  const selectedNamespace = decodeURIComponent(namespace);
   const [selectedVectorId, setSelectedVectorId] = useState<string>("");
 
   const { data: namespacesData, isLoading: namespacesLoading } =
@@ -23,7 +33,9 @@ export default function Home() {
 
   const navigate = (namespace: string, vector = "") => {
     if (namespace && vector) {
-      router.push(`/${encodeURIComponent(namespace)}/${encodeURIComponent(vector)}`);
+      router.push(
+        `/${encodeURIComponent(namespace)}/${encodeURIComponent(vector)}`,
+      );
     } else if (namespace) {
       router.push(`/${encodeURIComponent(namespace)}`);
     } else {
@@ -32,14 +44,12 @@ export default function Home() {
   };
 
   const handleNamespaceSelect = (namespace: string) => {
-    setSelectedNamespace(namespace);
-    setSelectedVectorId(""); // Clear selected vector when namespace changes
-    navigate(namespace); // Update URL
+    navigate(namespace); // Clear vector when namespace changes
   };
 
   const handleVectorSelect = (vectorId: string) => {
     setSelectedVectorId(vectorId);
-    navigate(selectedNamespace, vectorId); // Update URL
+    navigate(selectedNamespace, vectorId);
   };
 
   return (
@@ -68,24 +78,13 @@ export default function Home() {
 
             {/* Middle column - Vectors */}
             <div className="lg:col-span-4">
-              {selectedNamespace ? (
-                <VectorList
-                  vectorIds={vectorIds?.vectors ?? []}
-                  namespace={selectedNamespace}
-                  isLoading={vectorsLoading}
-                  selectedVectorId={selectedVectorId}
-                  onVectorSelect={handleVectorSelect}
-                />
-              ) : (
-                <div className="rounded-lg bg-white p-6 shadow-md">
-                  <h3 className="mb-4 text-xl font-semibold text-gray-800">
-                    Select a Namespace
-                  </h3>
-                  <p className="text-gray-600">
-                    Choose a namespace from the left panel to view its vectors.
-                  </p>
-                </div>
-              )}
+              <VectorList
+                vectorIds={vectorIds?.vectors ?? []}
+                namespace={selectedNamespace}
+                isLoading={vectorsLoading}
+                selectedVectorId={selectedVectorId}
+                onVectorSelect={handleVectorSelect}
+              />
             </div>
 
             {/* Right column - Vector Details */}
