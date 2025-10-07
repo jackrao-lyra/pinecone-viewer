@@ -30,7 +30,10 @@ export async function getAllNamespaces() {
       break;
     }
 
-    currentPage = await pineconeIndex.listNamespaces();
+    currentPage = await pineconeIndex.listNamespaces(
+      100,
+      currentPage.pagination?.next,
+    );
   }
 
   return allNamespaces;
