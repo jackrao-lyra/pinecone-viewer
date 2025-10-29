@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { api } from "~/trpc/react";
+import { usePineconeIndex } from "~/app/_components/use-pinecone-index";
 
 interface VectorListProps {
   vectorIds: string[];
@@ -21,21 +22,20 @@ export function VectorList({
   const [showDeleteAllDialog, setShowDeleteAllDialog] = useState(false);
 
   const utils = api.useUtils();
+  const { indexName } = usePineconeIndex();
 
   const deleteVectorMutation = api.pinecone.deleteVector.useMutation({
     onMutate: async ({ vectorId, namespace }) => {
       // Cancel any outgoing refetches
-      await utils.pinecone.listVectorsInNamespace.cancel({ namespace });
+      await utils.pinecone.listVectorsInNamespace.cancel({ indexName, namespace });
 
       // Snapshot the previous value
-      const previousVectors = utils.pinecone.listVectorsInNamespace.getData({
-        namespace,
-      });
+      const previousVectors = utils.pinecone.listVectorsInNamespace.getData({ indexName, namespace });
 
       // Optimistically update to the new value
       if (previousVectors) {
         utils.pinecone.listVectorsInNamespace.setData(
-          { namespace },
+          { indexName, namespace },
           {
             vectors: previousVectors.vectors.filter((id) => id !== vectorId),
           },
@@ -49,7 +49,7 @@ export function VectorList({
       // If the mutation fails, use the context returned from onMutate to roll back
       if (context?.previousVectors) {
         utils.pinecone.listVectorsInNamespace.setData(
-          { namespace: variables.namespace },
+          { indexName, namespace: variables.namespace },
           context.previousVectors,
         );
       }
@@ -57,6 +57,7 @@ export function VectorList({
     onSettled: (data, error, variables) => {
       // Always refetch after error or success to ensure consistency
       void utils.pinecone.listVectorsInNamespace.invalidate({
+        indexName,
         namespace: variables.namespace,
       });
     },
@@ -65,17 +66,15 @@ export function VectorList({
   const deleteAllVectorsMutation = api.pinecone.deleteAllVectors.useMutation({
     onMutate: async ({ namespace }) => {
       // Cancel any outgoing refetches
-      await utils.pinecone.listVectorsInNamespace.cancel({ namespace });
+      await utils.pinecone.listVectorsInNamespace.cancel({ indexName, namespace });
 
       // Snapshot the previous value
-      const previousVectors = utils.pinecone.listVectorsInNamespace.getData({
-        namespace,
-      });
+      const previousVectors = utils.pinecone.listVectorsInNamespace.getData({ indexName, namespace });
 
       // Optimistically update to empty array
       if (previousVectors) {
         utils.pinecone.listVectorsInNamespace.setData(
-          { namespace },
+          { indexName, namespace },
           {
             vectors: [],
           },
@@ -92,7 +91,7 @@ export function VectorList({
       // If the mutation fails, use the context returned from onMutate to roll back
       if (context?.previousVectors) {
         utils.pinecone.listVectorsInNamespace.setData(
-          { namespace: variables.namespace },
+          { indexName, namespace: variables.namespace },
           context.previousVectors,
         );
       }
@@ -100,6 +99,7 @@ export function VectorList({
     onSettled: (data, error, variables) => {
       // Always refetch after error or success to ensure consistency
       void utils.pinecone.listVectorsInNamespace.invalidate({
+        indexName,
         namespace: variables.namespace,
       });
     },
@@ -107,6 +107,7 @@ export function VectorList({
 
   const handleDeleteVector = (vectorId: string) => {
     deleteVectorMutation.mutate({
+      indexName,
       namespace,
       vectorId,
     });
@@ -114,6 +115,7 @@ export function VectorList({
 
   const handleDeleteAll = () => {
     deleteAllVectorsMutation.mutate({
+      indexName,
       namespace,
     });
   };

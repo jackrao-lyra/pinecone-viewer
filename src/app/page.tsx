@@ -6,19 +6,25 @@ import { NamespaceList } from "~/app/_components/namespace-list";
 import { VectorList } from "~/app/_components/vector-list";
 import { VectorDetail } from "~/app/_components/vector-detail";
 import { api } from "~/trpc/react";
+import { IndexInput } from "~/app/_components/index-input";
+import { usePineconeIndex } from "~/app/_components/use-pinecone-index";
 
 export default function Home() {
   const router = useRouter();
+  const { indexName } = usePineconeIndex();
   const [selectedNamespace, setSelectedNamespace] = useState<string>("");
   const [selectedVectorId, setSelectedVectorId] = useState<string>("");
 
   const { data: namespacesData, isLoading: namespacesLoading } =
-    api.pinecone.listNamespaces.useQuery();
+    api.pinecone.listNamespaces.useQuery(
+      { indexName },
+      { enabled: !!indexName },
+    );
 
   const { data: vectorIds, isLoading: vectorsLoading } =
     api.pinecone.listVectorsInNamespace.useQuery(
-      { namespace: selectedNamespace },
-      { enabled: !!selectedNamespace },
+      { indexName, namespace: selectedNamespace },
+      { enabled: !!selectedNamespace && !!indexName },
     );
 
   const navigate = (namespace: string, vector = "") => {
@@ -52,6 +58,9 @@ export default function Home() {
           <p className="text-lg text-gray-600">
             Explore and visualize your Pinecone vector database
           </p>
+          <div className="mt-4 flex justify-center">
+            <IndexInput compact />
+          </div>
         </div>
 
         <div className="mx-auto max-w-none px-4">

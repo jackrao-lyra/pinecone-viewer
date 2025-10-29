@@ -1,6 +1,7 @@
 "use client";
 
 import { api } from "~/trpc/react";
+import { usePineconeIndex } from "~/app/_components/use-pinecone-index";
 
 interface VectorDetailProps {
   vectorId: string;
@@ -8,13 +9,14 @@ interface VectorDetailProps {
 }
 
 export function VectorDetail({ vectorId, namespace }: VectorDetailProps) {
+  const { indexName } = usePineconeIndex();
   const {
     data: vectorData,
     isLoading,
     error,
   } = api.pinecone.fetchVector.useQuery(
-    { namespace, vectorId },
-    { enabled: !!vectorId && !!namespace },
+    { indexName, namespace, vectorId },
+    { enabled: !!vectorId && !!namespace && !!indexName },
   );
   if (isLoading) {
     return (

@@ -4,7 +4,6 @@ import { env } from "~/env.js";
 // Pinecone configuration
 export const pineconeConfig = {
   apiKey: env.PINECONE_KEY as string,
-  indexName: env.PINECONE_INDEX as string,
   maxConcurrency: 5,
 };
 
@@ -13,4 +12,7 @@ export const pinecone = new Pinecone({
   apiKey: pineconeConfig.apiKey,
 });
 
-export const pineconeIndex = pinecone.index(pineconeConfig.indexName);
+// Return a Pinecone index instance for the provided index name
+export function getPineconeIndex(indexName: string) {
+  return pinecone.index(indexName);
+}

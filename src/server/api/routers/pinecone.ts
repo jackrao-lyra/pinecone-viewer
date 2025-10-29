@@ -1,21 +1,22 @@
 import { z } from "zod";
 import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
-import { pineconeIndex } from "~/config/pinecone";
+import { getPineconeIndex } from "~/config/pinecone";
 
-export async function fetchByIds(subdomain: string, ids: string[]) {
-  return pineconeIndex.namespace(subdomain).fetch(ids);
+export async function fetchByIds(indexName: string, subdomain: string, ids: string[]) {
+  return getPineconeIndex(indexName).namespace(subdomain).fetch(ids);
 }
 export async function listPaginated(
+  indexName: string,
   subdomain: string,
   options: { paginationToken?: string; limit?: number },
 ) {
-  return pineconeIndex.namespace(subdomain).listPaginated(options);
+  return getPineconeIndex(indexName).namespace(subdomain).listPaginated(options);
 }
 
-export async function getAllNamespaces() {
+export async function getAllNamespaces(indexName: string) {
   const allNamespaces: string[] = [];
 
-  let currentPage = await pineconeIndex.listNamespaces();
+  let currentPage = await getPineconeIndex(indexName).listNamespaces();
 
   while (currentPage) {
     if (currentPage.namespaces) {
@@ -30,7 +31,7 @@ export async function getAllNamespaces() {
       break;
     }
 
-    currentPage = await pineconeIndex.listNamespaces(
+    currentPage = await getPineconeIndex(indexName).listNamespaces(
       100,
       currentPage.pagination?.next,
     );
@@ -38,10 +39,10 @@ export async function getAllNamespaces() {
 
   return allNamespaces;
 }
-export async function getAllVectors(subdomain: string) {
+export async function getAllVectors(indexName: string, subdomain: string) {
   const allVectors: string[] = [];
 
-  let currentPage = await listPaginated(subdomain, {});
+  let currentPage = await listPaginated(indexName, subdomain, {});
 
   while (currentPage) {
     if (currentPage.vectors) {
@@ -56,7 +57,7 @@ export async function getAllVectors(subdomain: string) {
       break;
     }
 
-    currentPage = await listPaginated(subdomain, {
+    currentPage = await listPaginated(indexName, subdomain, {
       paginationToken: currentPage.pagination.next,
     });
   }
@@ -65,9 +66,11 @@ export async function getAllVectors(subdomain: string) {
 }
 
 export const pineconeRouter = createTRPCRouter({
-  listNamespaces: publicProcedure.query(async () => {
+  listNamespaces: publicProcedure
+    .input(z.object({ indexName: z.string() }))
+    .query(async ({ input }) => {
     try {
-      const namespaces = await getAllNamespaces();
+      const namespaces = await getAllNamespaces(input.indexName);
       return {
         namespaces,
         totalNamespaces: namespaces.length,
@@ -81,13 +84,14 @@ export const pineconeRouter = createTRPCRouter({
   deleteVector: publicProcedure
     .input(
       z.object({
+        indexName: z.string(),
         namespace: z.string(),
         vectorId: z.string(),
       }),
     )
     .mutation(async ({ input }) => {
       try {
-        await pineconeIndex
+        await getPineconeIndex(input.indexName)
           .namespace(input.namespace)
           .deleteOne(input.vectorId);
         return { success: true };
@@ -100,12 +104,15 @@ export const pineconeRouter = createTRPCRouter({
   deleteAllVectors: publicProcedure
     .input(
       z.object({
+        indexName: z.string(),
         namespace: z.string(),
       }),
     )
     .mutation(async ({ input }) => {
       try {
-        await pineconeIndex.namespace(input.namespace).deleteAll();
+        await getPineconeIndex(input.indexName)
+          .namespace(input.namespace)
+          .deleteAll();
         return { success: true };
       } catch (error) {
         console.error("Error deleting all vectors:", error);
@@ -116,11 +123,12 @@ export const pineconeRouter = createTRPCRouter({
   listVectorsInNamespace: publicProcedure
     .input(
       z.object({
+        indexName: z.string(),
         namespace: z.string(),
       }),
     )
     .query(async ({ input }) => {
-      const vectors = await getAllVectors(input.namespace);
+      const vectors = await getAllVectors(input.indexName, input.namespace);
 
       return {
         vectors,
@@ -130,13 +138,18 @@ export const pineconeRouter = createTRPCRouter({
   fetchVector: publicProcedure
     .input(
       z.object({
+        indexName: z.string(),
         namespace: z.string(),
         vectorId: z.string(),
       }),
     )
     .query(async ({ input }) => {
       try {
-        const result = await fetchByIds(input.namespace, [input.vectorId]);
+        const result = await fetchByIds(
+          input.indexName,
+          input.namespace,
+          [input.vectorId],
+        );
         const record = result.records[input.vectorId];
         if (!record) {
           return {
