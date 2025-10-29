@@ -21,11 +21,9 @@ export default function Home() {
       { enabled: !!indexName },
     );
 
-  const { data: vectorIds, isLoading: vectorsLoading } =
-    api.pinecone.listVectorsInNamespace.useQuery(
-      { indexName, namespace: selectedNamespace },
-      { enabled: !!selectedNamespace && !!indexName },
-    );
+  const selectedNamespaceStats = namespacesData?.namespaces.find(
+    (namespace) => namespace.name === selectedNamespace,
+  );
 
   const navigate = (namespace: string, vector = "") => {
     if (namespace && vector) {
@@ -79,9 +77,8 @@ export default function Home() {
             <div className="lg:col-span-4">
               {selectedNamespace ? (
                 <VectorList
-                  vectorIds={vectorIds?.vectors ?? []}
                   namespace={selectedNamespace}
-                  isLoading={vectorsLoading}
+                  totalCount={selectedNamespaceStats?.vectorCount}
                   selectedVectorId={selectedVectorId}
                   onVectorSelect={handleVectorSelect}
                 />

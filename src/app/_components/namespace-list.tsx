@@ -1,13 +1,23 @@
 "use client";
 
+import { useMemo } from "react";
 import { api } from "~/trpc/react";
+import { useScrollRestoration } from "~/app/_components/use-scroll-restoration";
+
+interface NamespaceSummary {
+  name: string;
+  vectorCount: number;
+}
 
 interface NamespaceListProps {
-  namespaces: string[];
+  namespaces: NamespaceSummary[];
   selectedNamespace: string;
   onNamespaceSelect: (namespace: string) => void;
   isLoading?: boolean;
 }
+
+const numberFormatter = new Intl.NumberFormat();
+const SCROLL_STORAGE_KEY = "pinecone:namespaceList:scrollTop";
 
 export function NamespaceList({
   namespaces,
@@ -17,6 +27,9 @@ export function NamespaceList({
 }: NamespaceListProps) {
   const { data: starredNamespaces } = api.starredNamespaces.list.useQuery();
   const utils = api.useUtils();
+  const scrollContainerRef = useScrollRestoration(SCROLL_STORAGE_KEY, [
+    namespaces.length,
+  ]);
 
   const starMutation = api.starredNamespaces.star.useMutation({
     onMutate: async ({ namespace }) => {
@@ -94,6 +107,23 @@ export function NamespaceList({
     }
   };
 
+  const starredSet = useMemo(
+    () => new Set(starredNamespaces?.starredNamespaces ?? []),
+    [starredNamespaces?.starredNamespaces],
+  );
+
+  const sortedNamespaces = useMemo(() => {
+    return [...namespaces].sort((a, b) => {
+      const aStarred = starredSet.has(a.name);
+      const bStarred = starredSet.has(b.name);
+
+      if (aStarred && !bStarred) return -1;
+      if (!aStarred && bStarred) return 1;
+
+      return a.name.localeCompare(b.name);
+    });
+  }, [namespaces, starredSet]);
+
   if (isLoading) {
     return (
       <div className="rounded-lg bg-white p-6 shadow-md">
@@ -118,18 +148,6 @@ export function NamespaceList({
     );
   }
 
-  // Sort namespaces: starred first, then alphabetically
-  const starredSet = new Set(starredNamespaces?.starredNamespaces ?? []);
-  const sortedNamespaces = [...namespaces].sort((a, b) => {
-    const aStarred = starredSet.has(a);
-    const bStarred = starredSet.has(b);
-
-    if (aStarred && !bStarred) return -1;
-    if (!aStarred && bStarred) return 1;
-
-    return a.localeCompare(b);
-  });
-
   return (
     <div className="rounded-lg bg-white p-6 shadow-md">
       <div className="mb-4">
@@ -140,29 +158,38 @@ export function NamespaceList({
         </p>
       </div>
 
-      <div className="max-h-96 space-y-2 overflow-y-auto">
+      <div
+        ref={scrollContainerRef}
+        className="max-h-96 space-y-2 overflow-y-auto"
+      >
         {sortedNamespaces.map((namespace) => {
-          const isStarred = starredSet.has(namespace);
+          const isStarred = starredSet.has(namespace.name);
           return (
             <div
-              key={namespace}
+              key={namespace.name}
               className={`w-full rounded-lg border p-3 transition-colors ${
-                selectedNamespace === namespace
+                selectedNamespace === namespace.name
                   ? "border-blue-500 bg-blue-50 text-blue-900"
                   : "border-gray-200 hover:bg-gray-50"
               }`}
             >
               <div className="flex items-center justify-between">
                 <button
-                  onClick={() => onNamespaceSelect(namespace)}
+                  onClick={() => onNamespaceSelect(namespace.name)}
                   className="flex-1 text-left"
                 >
-                  <code className="font-mono text-sm">{namespace}</code>
+                  <div className="flex flex-col">
+                    <code className="font-mono text-sm">{namespace.name}</code>
+                    <span className="text-xs text-gray-500">
+                      {numberFormatter.format(namespace.vectorCount)} vector
+                      {namespace.vectorCount !== 1 ? "s" : ""}
+                    </span>
+                  </div>
                 </button>
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    handleStarToggle(namespace, isStarred);
+                    handleStarToggle(namespace.name, isStarred);
                   }}
                   className="ml-2 rounded p-1 transition-colors hover:bg-gray-200"
                   title={isStarred ? "Unstar namespace" : "Star namespace"}

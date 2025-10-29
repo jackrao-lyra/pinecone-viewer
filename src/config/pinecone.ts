@@ -3,7 +3,7 @@ import { env } from "~/env.js";
 
 // Pinecone configuration
 export const pineconeConfig = {
-  apiKey: env.PINECONE_KEY as string,
+  apiKey: env.PINECONE_KEY,
   maxConcurrency: 5,
 };
 

@@ -1,111 +1,179 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "~/trpc/react";
 import { usePineconeIndex } from "~/app/_components/use-pinecone-index";
+import { useScrollRestoration } from "~/app/_components/use-scroll-restoration";
 
 interface VectorListProps {
-  vectorIds: string[];
   namespace: string;
-  isLoading?: boolean;
+  totalCount?: number;
   selectedVectorId?: string;
   onVectorSelect?: (vectorId: string) => void;
 }
 
+const PAGE_SIZE = 50;
+const EMPTY_QUERY_INPUT = {
+  indexName: "",
+  namespace: "",
+  limit: PAGE_SIZE,
+} as const;
+const numberFormatter = new Intl.NumberFormat();
+
 export function VectorList({
-  vectorIds,
   namespace,
-  isLoading,
+  totalCount,
   selectedVectorId,
   onVectorSelect,
 }: VectorListProps) {
   const [showDeleteAllDialog, setShowDeleteAllDialog] = useState(false);
+  const [paginationToken, setPaginationToken] = useState<string | undefined>();
+  const [previousTokens, setPreviousTokens] = useState<(string | undefined)[]>([]);
+  const [currentPageIndex, setCurrentPageIndex] = useState(0);
 
   const utils = api.useUtils();
   const { indexName } = usePineconeIndex();
+  const scrollStorageKey = useMemo(
+    () => `pinecone:vectorList:${indexName ?? "_"}:${namespace || "__none__"}`,
+    [indexName, namespace],
+  );
+
+  const resetPagination = useCallback(() => {
+    setPaginationToken(undefined);
+    setPreviousTokens([]);
+    setCurrentPageIndex(0);
+  }, []);
+
+  useEffect(() => {
+    resetPagination();
+  }, [namespace, indexName, resetPagination]);
+
+  const queryInput = useMemo(() => {
+    if (!indexName || !namespace) {
+      return null;
+    }
+
+    const base = {
+      indexName,
+      namespace,
+      limit: PAGE_SIZE,
+    } as const;
+
+    return paginationToken ? { ...base, paginationToken } : base;
+  }, [indexName, namespace, paginationToken]);
+
+  const vectorsQuery = api.pinecone.listVectorsInNamespace.useQuery(
+    queryInput ?? EMPTY_QUERY_INPUT,
+    {
+      enabled: Boolean(queryInput),
+      keepPreviousData: true,
+    },
+  );
+
+  const { data, isLoading, isFetching } = vectorsQuery;
+  const scrollContainerRef = useScrollRestoration(scrollStorageKey, [data?.vectors?.length ?? 0]);
+  const vectors = data?.vectors ?? [];
+  const hasNextPage = Boolean(data?.nextPageToken);
+  const hasPreviousPage = previousTokens.length > 0;
+
+  const resolvedTotalCount = useMemo(() => {
+    if (typeof totalCount === "number") {
+      return totalCount;
+    }
+
+    if (!hasNextPage) {
+      return vectors.length + currentPageIndex * PAGE_SIZE;
+    }
+
+    return undefined;
+  }, [totalCount, hasNextPage, vectors.length, currentPageIndex]);
+
+  const pageStartIndex = currentPageIndex * PAGE_SIZE;
+  const visibleRangeStart = vectors.length > 0 ? pageStartIndex + 1 : 0;
+  const visibleRangeEnd = pageStartIndex + vectors.length;
 
   const deleteVectorMutation = api.pinecone.deleteVector.useMutation({
-    onMutate: async ({ vectorId, namespace }) => {
-      // Cancel any outgoing refetches
-      await utils.pinecone.listVectorsInNamespace.cancel({ indexName, namespace });
-
-      // Snapshot the previous value
-      const previousVectors = utils.pinecone.listVectorsInNamespace.getData({ indexName, namespace });
-
-      // Optimistically update to the new value
-      if (previousVectors) {
-        utils.pinecone.listVectorsInNamespace.setData(
-          { indexName, namespace },
-          {
-            vectors: previousVectors.vectors.filter((id) => id !== vectorId),
-          },
-        );
+    onMutate: async ({ vectorId }) => {
+      if (!queryInput) {
+        return { previousVectors: undefined };
       }
 
-      // Return a context object with the snapshotted value
+      await utils.pinecone.listVectorsInNamespace.cancel(queryInput);
+
+      const previousVectors = utils.pinecone.listVectorsInNamespace.getData(queryInput);
+
+      if (previousVectors) {
+        utils.pinecone.listVectorsInNamespace.setData(queryInput, {
+          ...previousVectors,
+          vectors: previousVectors.vectors.filter((id) => id !== vectorId),
+        });
+      }
+
       return { previousVectors };
     },
-    onError: (err, variables, context) => {
-      // If the mutation fails, use the context returned from onMutate to roll back
-      if (context?.previousVectors) {
-        utils.pinecone.listVectorsInNamespace.setData(
-          { indexName, namespace: variables.namespace },
-          context.previousVectors,
-        );
+    onError: (_err, _variables, context) => {
+      if (!queryInput || !context?.previousVectors) {
+        return;
       }
+
+      utils.pinecone.listVectorsInNamespace.setData(queryInput, context.previousVectors);
     },
-    onSettled: (data, error, variables) => {
-      // Always refetch after error or success to ensure consistency
-      void utils.pinecone.listVectorsInNamespace.invalidate({
-        indexName,
-        namespace: variables.namespace,
-      });
+    onSettled: async () => {
+      if (queryInput) {
+        await utils.pinecone.listVectorsInNamespace.invalidate(queryInput);
+      }
+
+      if (indexName) {
+        await utils.pinecone.listNamespaces.invalidate({ indexName });
+      }
     },
   });
 
   const deleteAllVectorsMutation = api.pinecone.deleteAllVectors.useMutation({
-    onMutate: async ({ namespace }) => {
-      // Cancel any outgoing refetches
-      await utils.pinecone.listVectorsInNamespace.cancel({ indexName, namespace });
-
-      // Snapshot the previous value
-      const previousVectors = utils.pinecone.listVectorsInNamespace.getData({ indexName, namespace });
-
-      // Optimistically update to empty array
-      if (previousVectors) {
-        utils.pinecone.listVectorsInNamespace.setData(
-          { indexName, namespace },
-          {
-            vectors: [],
-          },
-        );
+    onMutate: async () => {
+      if (!queryInput) {
+        return { previousVectors: undefined };
       }
 
-      // Return a context object with the snapshotted value
+      await utils.pinecone.listVectorsInNamespace.cancel(queryInput);
+
+      const previousVectors = utils.pinecone.listVectorsInNamespace.getData(queryInput);
+
+      if (previousVectors) {
+        utils.pinecone.listVectorsInNamespace.setData(queryInput, {
+          ...previousVectors,
+          vectors: [],
+        });
+      }
+
       return { previousVectors };
     },
-    onSuccess: () => {
+    onSuccess: async () => {
       setShowDeleteAllDialog(false);
-    },
-    onError: (err, variables, context) => {
-      // If the mutation fails, use the context returned from onMutate to roll back
-      if (context?.previousVectors) {
-        utils.pinecone.listVectorsInNamespace.setData(
-          { indexName, namespace: variables.namespace },
-          context.previousVectors,
-        );
+      resetPagination();
+
+      if (queryInput) {
+        await utils.pinecone.listVectorsInNamespace.invalidate(queryInput);
+      }
+
+      if (indexName) {
+        await utils.pinecone.listNamespaces.invalidate({ indexName });
       }
     },
-    onSettled: (data, error, variables) => {
-      // Always refetch after error or success to ensure consistency
-      void utils.pinecone.listVectorsInNamespace.invalidate({
-        indexName,
-        namespace: variables.namespace,
-      });
+    onError: (_err, _variables, context) => {
+      if (!queryInput || !context?.previousVectors) {
+        return;
+      }
+
+      utils.pinecone.listVectorsInNamespace.setData(queryInput, context.previousVectors);
     },
   });
 
   const handleDeleteVector = (vectorId: string) => {
+    if (!indexName || !namespace) {
+      return;
+    }
+
     deleteVectorMutation.mutate({
       indexName,
       namespace,
@@ -114,11 +182,42 @@ export function VectorList({
   };
 
   const handleDeleteAll = () => {
+    if (!indexName || !namespace) {
+      return;
+    }
+
     deleteAllVectorsMutation.mutate({
       indexName,
       namespace,
     });
   };
+
+  const goToNextPage = () => {
+    if (!data?.nextPageToken) {
+      return;
+    }
+
+    setPreviousTokens((prev) => [...prev, paginationToken]);
+    setPaginationToken(data.nextPageToken ?? undefined);
+    setCurrentPageIndex((prev) => prev + 1);
+  };
+
+  const goToPreviousPage = () => {
+    setPreviousTokens((prev) => {
+      if (prev.length === 0) {
+        return prev;
+      }
+
+      const nextTokens = [...prev];
+      const previousToken = nextTokens.pop();
+
+      setPaginationToken(previousToken);
+      setCurrentPageIndex((index) => Math.max(0, index - 1));
+
+      return nextTokens;
+    });
+  };
+
   if (isLoading) {
     return (
       <div className="rounded-lg bg-white p-6 shadow-md">
@@ -134,7 +233,9 @@ export function VectorList({
     );
   }
 
-  if (vectorIds.length === 0) {
+  const isEmpty = vectors.length === 0 && !hasNextPage;
+
+  if (isEmpty) {
     return (
       <div className="rounded-lg bg-white p-6 shadow-md">
         <h3 className="mb-4 text-xl font-semibold text-gray-800">
@@ -147,15 +248,21 @@ export function VectorList({
 
   return (
     <div className="rounded-lg bg-white p-6 shadow-md">
-      <div className="mb-4 flex items-center justify-between">
-        <h3 className="text-xl font-semibold text-gray-800">
-          Vectors in &ldquo;{namespace}&rdquo;
-        </h3>
+      <div className="mb-4 flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+        <div>
+          <h3 className="text-xl font-semibold text-gray-800">
+            Vectors in &ldquo;{namespace}&rdquo;
+          </h3>
+          <p className="text-sm text-gray-600">
+            {typeof resolvedTotalCount === "number"
+              ? `${numberFormatter.format(resolvedTotalCount)} total vectors`
+              : `Showing ${numberFormatter.format(visibleRangeStart)}–${numberFormatter.format(
+                  visibleRangeEnd,
+                )}${hasNextPage ? "+" : ""}`}
+          </p>
+        </div>
         <div className="flex items-center gap-4">
-          <span className="text-sm text-gray-600">
-            {vectorIds.length} vector{vectorIds.length !== 1 ? "s" : ""} found
-          </span>
-          {vectorIds.length > 0 && (
+          {vectors.length > 0 && (
             <button
               onClick={() => setShowDeleteAllDialog(true)}
               className="rounded-md bg-red-600 px-3 py-1 text-sm text-white transition-colors hover:bg-red-700"
@@ -166,8 +273,8 @@ export function VectorList({
         </div>
       </div>
 
-      <div className="max-h-96 space-y-2 overflow-y-auto">
-        {vectorIds.map((vectorId, index) => (
+      <div ref={scrollContainerRef} className="max-h-96 space-y-2 overflow-y-auto">
+        {vectors.map((vectorId, index) => (
           <div
             key={vectorId}
             className={`w-full rounded-lg border p-3 transition-colors ${
@@ -181,7 +288,9 @@ export function VectorList({
                 onClick={() => onVectorSelect?.(vectorId)}
                 className="flex flex-1 items-center text-left"
               >
-                <span className="mr-3 text-sm text-gray-500">#{index + 1}</span>
+                <span className="mr-3 text-sm text-gray-500">
+                  #{numberFormatter.format(pageStartIndex + index + 1)}
+                </span>
                 <code className="font-mono text-sm">{vectorId}</code>
               </button>
               <button
@@ -191,6 +300,7 @@ export function VectorList({
                 }}
                 className="ml-2 rounded p-1 text-red-600 transition-colors hover:bg-red-100 disabled:opacity-50"
                 title="Delete vector"
+                disabled={deleteVectorMutation.isPending}
               >
                 <svg
                   className="h-4 w-4"
@@ -211,7 +321,31 @@ export function VectorList({
         ))}
       </div>
 
-      {/* Delete All Confirmation Dialog */}
+      <div className="mt-4 flex items-center justify-between text-sm text-gray-600">
+        <button
+          onClick={goToPreviousPage}
+          disabled={!hasPreviousPage || isFetching}
+          className="rounded-md border border-gray-200 px-3 py-1 transition-colors enabled:hover:bg-gray-100 disabled:opacity-50"
+        >
+          Previous
+        </button>
+        <span>
+          Page {currentPageIndex + 1}
+          {typeof resolvedTotalCount === "number"
+            ? ` • ${numberFormatter.format(visibleRangeStart)}–${numberFormatter.format(
+                visibleRangeEnd,
+              )} of ${numberFormatter.format(resolvedTotalCount)}`
+            : ""}
+        </span>
+        <button
+          onClick={goToNextPage}
+          disabled={!hasNextPage || isFetching}
+          className="rounded-md border border-gray-200 px-3 py-1 transition-colors enabled:hover:bg-gray-100 disabled:opacity-50"
+        >
+          Next
+        </button>
+      </div>
+
       {showDeleteAllDialog && (
         <div className="bg-opacity-50 fixed inset-0 z-50 flex items-center justify-center bg-black">
           <div className="mx-4 w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
@@ -219,9 +353,8 @@ export function VectorList({
               Delete All Vectors
             </h3>
             <p className="mb-6 text-gray-600">
-              Are you sure you want to delete all {vectorIds.length} vectors in
-              the &ldquo;{namespace}&rdquo; namespace? This action cannot be
-              undone.
+              Are you sure you want to delete all vectors in the &ldquo;{namespace}&rdquo;
+              namespace? This action cannot be undone.
             </p>
             <div className="flex justify-end gap-3">
               <button
@@ -235,9 +368,7 @@ export function VectorList({
                 disabled={deleteAllVectorsMutation.isPending}
                 className="rounded-md bg-red-600 px-4 py-2 text-white transition-colors hover:bg-red-700 disabled:opacity-50"
               >
-                {deleteAllVectorsMutation.isPending
-                  ? "Deleting..."
-                  : "Delete All"}
+                {deleteAllVectorsMutation.isPending ? "Deleting..." : "Delete All"}
               </button>
             </div>
           </div>
