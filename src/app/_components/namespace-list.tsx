@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { api } from "~/trpc/react";
 import { useScrollRestoration } from "~/app/_components/use-scroll-restoration";
 
@@ -18,6 +18,8 @@ interface NamespaceListProps {
 
 const numberFormatter = new Intl.NumberFormat();
 const SCROLL_STORAGE_KEY = "pinecone:namespaceList:scrollTop";
+const SORT_STORAGE_KEY = "pinecone:namespaceList:sort";
+type NamespaceSortOption = "alpha" | "vectorAsc" | "vectorDesc";
 
 export function NamespaceList({
   namespaces,
@@ -27,9 +29,29 @@ export function NamespaceList({
 }: NamespaceListProps) {
   const { data: starredNamespaces } = api.starredNamespaces.list.useQuery();
   const utils = api.useUtils();
-  const scrollContainerRef = useScrollRestoration(SCROLL_STORAGE_KEY, [
+  const [sortOption, setSortOption] = useState<NamespaceSortOption>(() => {
+    if (typeof window === "undefined") {
+      return "alpha";
+    }
+
+    const stored = window.sessionStorage.getItem(SORT_STORAGE_KEY);
+    if (stored === "alpha" || stored === "vectorAsc" || stored === "vectorDesc") {
+      return stored;
+    }
+
+    return "alpha";
+  });
+  const scrollStorageKey = `${SCROLL_STORAGE_KEY}:${sortOption}`;
+  const scrollContainerRef = useScrollRestoration(scrollStorageKey, [
     namespaces.length,
   ]);
+
+  const handleSortChange = useCallback((value: NamespaceSortOption) => {
+    setSortOption(value);
+    if (typeof window !== "undefined") {
+      window.sessionStorage.setItem(SORT_STORAGE_KEY, value);
+    }
+  }, []);
 
   const starMutation = api.starredNamespaces.star.useMutation({
     onMutate: async ({ namespace }) => {
@@ -113,16 +135,27 @@ export function NamespaceList({
   );
 
   const sortedNamespaces = useMemo(() => {
-    return [...namespaces].sort((a, b) => {
-      const aStarred = starredSet.has(a.name);
-      const bStarred = starredSet.has(b.name);
+    const sorted = [...namespaces].sort((a, b) => {
+      if (sortOption === "vectorAsc") {
+        if (a.vectorCount !== b.vectorCount) {
+          return a.vectorCount - b.vectorCount;
+        }
+      }
 
-      if (aStarred && !bStarred) return -1;
-      if (!aStarred && bStarred) return 1;
+      if (sortOption === "vectorDesc") {
+        if (a.vectorCount !== b.vectorCount) {
+          return b.vectorCount - a.vectorCount;
+        }
+      }
 
       return a.name.localeCompare(b.name);
     });
-  }, [namespaces, starredSet]);
+
+    const starredList = sorted.filter((namespace) => starredSet.has(namespace.name));
+    const regularList = sorted.filter((namespace) => !starredSet.has(namespace.name));
+
+    return [...starredList, ...regularList];
+  }, [namespaces, sortOption, starredSet]);
 
   if (isLoading) {
     return (
@@ -150,12 +183,28 @@ export function NamespaceList({
 
   return (
     <div className="rounded-lg bg-white p-6 shadow-md">
-      <div className="mb-4">
-        <h3 className="text-xl font-semibold text-gray-800">Namespaces</h3>
-        <p className="text-sm text-gray-600">
-          {namespaces.length} namespace{namespaces.length !== 1 ? "s" : ""}{" "}
-          found
-        </p>
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h3 className="text-xl font-semibold text-gray-800">Namespaces</h3>
+          <p className="text-sm text-gray-600">
+            {namespaces.length} namespace{namespaces.length !== 1 ? "s" : ""}{" "}
+            found
+          </p>
+        </div>
+        <label className="flex items-center gap-2 text-sm text-gray-600">
+          <span>Sort by</span>
+          <select
+            value={sortOption}
+            onChange={(event) =>
+              handleSortChange(event.target.value as NamespaceSortOption)
+            }
+            className="rounded-md border border-gray-300 bg-white px-2 py-1 text-sm text-gray-700 transition-shadow focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+          >
+            <option value="alpha">Alphabetical (A→Z)</option>
+            <option value="vectorAsc">Vector count (low→high)</option>
+            <option value="vectorDesc">Vector count (high→low)</option>
+          </select>
+        </label>
       </div>
 
       <div
